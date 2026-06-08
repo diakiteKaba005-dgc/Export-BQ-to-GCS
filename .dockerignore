@@ -1,0 +1,9 @@
+.git
+.gitignore
+.dockerignore
+env/
+.env/
+__pycache__/
+cloudSql/connexion.json
+dag/
+architecture/

@@ -1,0 +1,11 @@
+# Configuration Cloud SQL locale (Contient vos accès de test)
+cloudSql/connexion.json
+
+# Environnement virtuel Python et caches
+env/
+.env/
+__pycache__/
+*.pyc
+
+# Variables d'environnement locales
+.env
