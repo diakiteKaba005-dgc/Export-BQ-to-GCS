@@ -91,8 +91,8 @@ with DAG(
             },
             "destination": {
                 "project_destination": "sandbox-damadou",
-                "bucket_name": "sandbox-damadou-fd-export-salesforce-bi",
-                "file_name_prefix": "export_salesforce_delta_7days_",
+                "bucket_name": "sandbox-damadou-fd-export-finance-bi",
+                "file_name_prefix": "Equipe_Sales/export_salesforce_delta_7days_",
                 "type_extraction": "CSV"
             }
         }

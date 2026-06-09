@@ -90,8 +90,8 @@ with DAG(
             },
             "destination": {
                 "project_destination": "sandbox-damadou",
-                "bucket_name": "sandbox-damadou-fd-export-salesforce-bi",
-                "file_name_prefix": "export_salesforce_dryrun_parquet_",
+                "bucket_name": "sandbox-damadou-fd-export-finance-bi",
+                "file_name_prefix": "data_engineering/export_salesforce_dryrun_parquet_",
                 "type_extraction": "PARQUET"
             }
         }

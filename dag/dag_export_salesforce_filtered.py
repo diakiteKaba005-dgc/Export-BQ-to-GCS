@@ -27,7 +27,7 @@ import json
 
 # Configuration des arguments par défaut d'Airflow
 default_args = {
-    'owner': 'data_engineering',
+    'owner': 'commerce',
     'depends_on_past': False,
     'start_date': datetime(2026, 6, 1),
     'email_on_failure': False,
@@ -90,8 +90,8 @@ with DAG(
             },
             "destination": {
                 "project_destination": "sandbox-damadou",
-                "bucket_name": "sandbox-damadou-fd-export-salesforce-bi",
-                "file_name_prefix": "export_salesforce_filtered_consultant_",
+                "bucket_name": "sandbox-damadou-fd-export-finance-bi",
+                "file_name_prefix": "commerce/export_salesforce_filtered_consultant_",
                 "type_extraction": "CSV"
             }
         }
