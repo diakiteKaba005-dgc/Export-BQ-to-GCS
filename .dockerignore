@@ -7,3 +7,5 @@ __pycache__/
 cloudSql/connexion.json
 dag/
 architecture/
+sa/
+.sa/

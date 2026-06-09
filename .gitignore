@@ -1,5 +1,7 @@
 # Configuration Cloud SQL locale (Contient vos accès de test)
 cloudSql/connexion.json
+sa/
+.sa/
 
 # Environnement virtuel Python et caches
 env/

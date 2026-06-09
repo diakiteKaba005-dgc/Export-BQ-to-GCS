@@ -77,7 +77,7 @@ with DAG(
             },
             "destination": {
                 "project_destination": "sandbox-damadou",
-                "bucket_name": "fd-export-finance-bi",
+                "bucket_name": "sandbox-damadou-fd-export-finance-bi",
                 "file_name_prefix": "extract_finance_",
                 "type_extraction": "CSV"
             }

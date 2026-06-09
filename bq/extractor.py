@@ -29,12 +29,13 @@ class BQExtractor:
                 if depth_days is not None and str(depth_days).upper() != "NULL":
                     # On calcule : Date du jour - X jours de profondeur
                     charniere_date = (datetime.utcnow() - timedelta(days=int(depth_days))).strftime("%Y-%m-%dT%H:%M:%S")
-                    where_clauses.append(f"{delta_col} >= TIMESTAMP('{charniere_date}')")
+                    # Cast the column to TIMESTAMP to avoid DATE vs TIMESTAMP comparison errors
+                    where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) >= TIMESTAMP('{charniere_date}')")
                 
                 # Si depth_days n'est pas fourni, on se base sur la dernière date d'export (last_export_date)
                 elif delta_cfg.get("last_export_date"):
                     last_exp = delta_cfg.get("last_export_date")
-                    where_clauses.append(f"{delta_col} >= TIMESTAMP('{last_exp}')")
+                    where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) >= TIMESTAMP('{last_exp}')")
 
         # 2. Ajout des filtres utilisateurs additionnels (ex: WHERE 1=1)
         if src.get("Filtrage_autres"):

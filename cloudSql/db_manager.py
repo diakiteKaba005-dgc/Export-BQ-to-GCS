@@ -7,28 +7,56 @@ from datetime import datetime
 class DBManager:
     def __init__(self):
         config_path = os.path.join(os.path.dirname(__file__), 'connexion.json')
-        
-        # 1. Si le fichier de config locale existe (Mode local)
+
+        env_db_host = os.getenv('DB_HOST')
+        env_db_name = os.getenv('DB_NAME')
+        env_db_user = os.getenv('DB_USER')
+
+        # 1. Priorité aux variables d'environnement si elles sont définies.
+        #    Cela permet d'utiliser la même connexion PostgreSQL que sur Cloud Run
+        #    même en local, sans se baser sur le socket Cloud SQL local.
+        if env_db_host and env_db_name and env_db_user:
+            env_db_password = os.getenv('DB_PASSWORD')
+            self.dsn = (
+                f"host={env_db_host} "
+                f"port={os.getenv('DB_PORT', 5432)} "
+                f"dbname={env_db_name} "
+                f"user={env_db_user}"
+            )
+            if env_db_password:
+                self.dsn += f" password={env_db_password}"
+            return
+
+        # 2. Sinon, lecture du fichier de config locale.
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 self.config = json.load(f)
+
+            db_host = self.config['DB_HOST']
+            db_port = self.config['DB_PORT']
+            db_password = self.config.get('DB_PASSWORD')
+
+            # Cas local : si la configuration pointe vers un socket Cloud SQL
+            # mais que l'on souhaite utiliser PostgreSQL localement, on remplace
+            # par l'hôte local défini via DB_HOST_LOCAL ou par 127.0.0.1.
+            local_override = os.getenv('DB_HOST_LOCAL')
+            if db_host.startswith('/cloudsql/'):
+                db_host = local_override or '127.0.0.1'
+
             self.dsn = (
-                f"host={self.config['DB_HOST']} "
-                f"port={self.config['DB_PORT']} "
+                f"host={db_host} "
+                f"port={db_port} "
                 f"dbname={self.config['DB_NAME']} "
                 f"user={self.config['DB_USER']}"
             )
-            if "DB_PASSWORD" in self.config:
-                self.dsn += f" password={self.config['DB_PASSWORD']}"
-        else:
-            # 2. Sinon, lecture des variables d'environnement Cloud Run (Mode Production)
-            self.dsn = (
-                f"host={os.getenv('DB_HOST')} "
-                f"port={os.getenv('DB_PORT', 5432)} "
-                f"dbname={os.getenv('DB_NAME')} "
-                f"user={os.getenv('DB_USER')} "
-                f"password={os.getenv('DB_PASSWORD')}"
-            )
+            if db_password:
+                self.dsn += f" password={db_password}"
+            return
+
+        raise RuntimeError(
+            'Aucune configuration PostgreSQL trouvée. Définissez DB_HOST, DB_NAME, DB_USER '
+            'dans les variables d environnement ou créez cloudSql/connexion.json.'
+        )
 
     def _get_connection(self):
         return psycopg2.connect(self.dsn)
