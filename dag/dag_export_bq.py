@@ -51,18 +51,17 @@ with DAG(
         "launcher": {
             "Consommateur": "Equipe_Finance",
             "Job_name": "export_finance_incremental1",
-            "Action": "Config_and_Run"
+            "Action": "Run" #Valeurs possibles : Run, Init_Maj_config, Config_and_Run
         },
         "params": {
             "job_name": "export_finance_incremental1",
-            "export_type": "Delta",
+            "export_type": "Full", #Valeurs possibles : Full, Delta
             "expected_date_format": "dd/MM/yyyy HH:mm:ss",
             "decimal_separator": ",",
-            "Set_config": True,
             "Column_partition": "Date",
             "last_Value": "2020-06-05T12:00:00Z",
             "last_Value_reprise": "2020-06-01T00:00:00Z",
-            "dry_run": True,
+            "dry_run": True, #La valeur true permet d'exporter uniquement 100 lignes pour valider la configuration et les filtres sans consommer beaucoup de ressources BigQuery
             "parameters_Delta_Export": {
                 "Delta_column": "Date",
                 "last_export_date": "2020-06-04T23:59:59Z",
@@ -79,7 +78,7 @@ with DAG(
                 "project_destination": "sandbox-damadou",
                 "bucket_name": "sandbox-damadou-fd-export-finance-bi",
                 "file_name_prefix": "extract_finance_",
-                "type_extraction": "CSV"
+                "type_extraction": "CSV" #Valeurs possibles : CSV, PARQUET, AVRO
             }
         }
     }
