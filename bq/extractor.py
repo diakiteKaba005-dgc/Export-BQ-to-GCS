@@ -3,7 +3,12 @@ from datetime import datetime, timedelta
 
 class BQExtractor:
     def __init__(self):
-        self.client = bigquery.Client()
+        self.client = None
+
+    def get_client(self):
+        if self.client is None:
+            self.client = bigquery.Client()
+        return self.client
 
     def build_query(self, config: dict) -> str:
         """Assemble dynamiquement la requête SQL avec gestion du mode Delta (Incrémental)."""
@@ -59,8 +64,9 @@ class BQExtractor:
 
     def estimate_costs(self, query: str) -> int:
         """Simule la requête (Dry Run) pour évaluer le volume de données scanné."""
+        client = self.get_client()
         job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
-        query_job = self.client.query(query, job_config=job_config)
+        query_job = client.query(query, job_config=job_config)
         return query_job.total_bytes_processed
 
     def extract_to_gcs(self, query: str, destination_uri: str, format_type: str) -> int:
@@ -72,7 +78,8 @@ class BQExtractor:
         }
         
         # 1. Étape intermédiaire : Exécution de la requête vers la table temporaire
-        query_job = self.client.query(query)
+        client = self.get_client()
+        query_job = client.query(query)
         result = query_job.result()  # Attend la fin du traitement BigQuery
         temp_table = query_job.destination
         

@@ -24,10 +24,13 @@ RUN pip install --no-cache-dir -r Requirements.txt
 # (Les fichiers comme venv/ ou cloudSql/connexion.json seront ignorés grâce au .dockerignore)
 COPY . .
 
-# 7. Validation du code avant de finaliser l'image
+# 7. Configuration du PYTHONPATH pour que les imports locaux fonctionnent pendant les tests
+ENV PYTHONPATH=/app
+
+# 8. Validation du code avant de finaliser l'image
 RUN pytest -q tests
 
-# 8. Information sur le port d'écoute (Cloud Run utilise par défaut le port 8080)
+# 9. Information sur le port d'écoute (Cloud Run utilise par défaut le port 8080)
 EXPOSE 8080
 
 # 8. Commande de démarrage du serveur Uvicorn

@@ -11,8 +11,23 @@ from gcs.consolidator import GCSConsolidator
 app = FastAPI(title="BQ to GCS Data Export Engine", version="1.0")
 
 db = DBManager()
-bq = BQExtractor()
-gcs = GCSConsolidator()
+bq = None
+gcs = None
+
+
+def get_bq_extractor():
+    global bq
+    if bq is None:
+        bq = BQExtractor()
+    return bq
+
+
+def get_gcs_consolidator():
+    global gcs
+    if gcs is None:
+        gcs = GCSConsolidator()
+    return gcs
+
 
 # Initialisation du schéma à chaque démarrage (Règle de gestion)
 @app.on_event("startup")
@@ -33,9 +48,11 @@ def run_export_pipeline(exec_id: str, start_time: datetime, action: str, consomm
     """Pipeline d'extraction asynchrone pour éviter les coupures de timeout HTTP."""
     end_time = None
     try:
+        extractor = get_bq_extractor()
+
         # 1. Construction SQL prenant en compte la logique Delta (Incrémentale)
-        query = bq.build_query(job_config)
-        bytes_processed = bq.estimate_costs(query) if job_config.get("dry_run") else 0
+        query = extractor.build_query(job_config)
+        bytes_processed = extractor.estimate_costs(query) if job_config.get("dry_run") else 0
         
         # 2. Définition des patterns d'URIs cibles
         dest = job_config["destination"]
@@ -45,10 +62,11 @@ def run_export_pipeline(exec_id: str, start_time: datetime, action: str, consomm
         temp_uri = f"gs://{dest['bucket_name']}/{dest['file_name_prefix']}{job_config['source']['table_id']}_{end_time_str}_*"
         
         # 3. Extraction vers GCS via la table temporaire anonyme
-        rows_exported = bq.extract_to_gcs(query, temp_uri, dest["type_extraction"])
+        rows_exported = extractor.extract_to_gcs(query, temp_uri, dest["type_extraction"])
         
         # 4. MISE À JOUR : Consolidation des shards avec gestion des paquets de 32 et de l'extension
-        final_uri = gcs.consolidate_shards(
+        consolidator = get_gcs_consolidator()
+        final_uri = consolidator.consolidate_shards(
             bucket_name=dest["bucket_name"],
             file_prefix=dest["file_name_prefix"],
             table_id=job_config["source"]["table_id"],
