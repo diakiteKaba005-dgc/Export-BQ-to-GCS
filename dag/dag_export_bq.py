@@ -55,7 +55,7 @@ with DAG(
         },
         "params": {
             "job_name": "export_finance_incremental1",
-            "export_type": "Full", #Valeurs possibles : Full, Delta
+            "export_type": "Full", #Valeurs possibles : Full, Delta, Full_Referentiel
             "expected_date_format": "dd/MM/yyyy HH:mm:ss",
             "decimal_separator": ",",
             "Column_partition": "Date",

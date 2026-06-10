@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -29,6 +30,31 @@ def get_gcs_consolidator():
     return gcs
 
 
+def update_dag_action_to_run(job_name: str):
+    """Tente de mettre à jour le DAG source pour basculer Action=Config_and_Run en Run."""
+    dag_dir = os.path.join(os.path.dirname(__file__), "dag")
+    if not os.path.isdir(dag_dir):
+        return
+
+    for filename in os.listdir(dag_dir):
+        if not filename.endswith(".py"):
+            continue
+
+        path = os.path.join(dag_dir, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except OSError:
+            continue
+
+        if f'"Job_name": "{job_name}"' in content and '"Action": "Config_and_Run"' in content:
+            updated = content.replace('"Action": "Config_and_Run"', '"Action": "Run"', 1)
+            if updated != content:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(updated)
+                return
+
+
 # Initialisation du schéma à chaque démarrage (Règle de gestion)
 @app.on_event("startup")
 def startup_event():
@@ -45,7 +71,15 @@ class ExportRequest(BaseModel):
     params: Optional[dict] = None
 
 def run_export_pipeline(exec_id: str, start_time: datetime, action: str, consommateur: str, job_config: dict):
-    """Pipeline d'extraction asynchrone pour éviter les coupures de timeout HTTP."""
+    """Pipeline d'extraction asynchrone pour éviter les coupures de timeout HTTP.
+
+    Règles métier Delta :
+    - Pour un export de type Delta, la date de dernier export `last_export_date`
+      doit être mise à jour après chaque export réussi avec la dernière date
+      effectivement exportée.
+    - La requête exécutée doit être construite de sorte que
+      `Delta_column > last_export_date` lorsque `last_export_date` est disponible.
+    """
     end_time = None
     try:
         extractor = get_bq_extractor()
@@ -80,6 +114,15 @@ def run_export_pipeline(exec_id: str, start_time: datetime, action: str, consomm
             exec_id=exec_id, start_time=start_time, status="SUCCESS", 
             end_time=end_time, rows=rows_exported, bytes_proc=bytes_processed, uri=final_uri
         )
+
+        if job_config.get("export_type") == "Delta":
+            last_export_date = extractor.get_last_export_timestamp(job_config)
+            if last_export_date:
+                db.update_last_export_date(job_config["job_name"], last_export_date)
+
+        if action == "Config_and_Run":
+            db.update_config_action(job_config["job_name"], "Run")
+            update_dag_action_to_run(job_config["job_name"])
         
     except Exception as e:
         print(f"[ERROR] Échec du pipeline d'extraction {exec_id} : {str(e)}")
@@ -101,7 +144,7 @@ async def trigger_export(payload: ExportRequest, background_tasks: BackgroundTas
     if launcher.Action in ["Init_Maj_config", "Config_and_Run"]:
         if not params:
             raise HTTPException(status_code=400, detail="Le payload 'params' est obligatoire pour cette action.")
-        db.save_or_update_config(params, launcher.Consommateur)
+        db.save_or_update_config(params, launcher.Consommateur, launcher.Action)
         job_config = params
         
     elif launcher.Action == "Run":

@@ -68,6 +68,7 @@ class DBManager:
             CREATE TABLE IF NOT EXISTS public.config_export_bq_to_gcs (
                 job_name VARCHAR(255) PRIMARY KEY,
                 consommateur VARCHAR(100) NOT NULL,
+                action VARCHAR(50) NOT NULL DEFAULT 'Run',
                 export_type VARCHAR(50) NOT NULL,
                 expected_date_format VARCHAR(50) DEFAULT 'dd/MM/yyyy HH:mm:ss',
                 decimal_separator VARCHAR(5) DEFAULT ',',
@@ -140,17 +141,17 @@ class DBManager:
                     cur.execute(query)
             conn.commit()
 
-    def save_or_update_config(self, params: dict, consommateur: str):
+    def save_or_update_config(self, params: dict, consommateur: str, action: str = 'Run'):
         """Sauvegarde ou écrase la configuration en base (Upsert via job_name)."""
         query = """
             INSERT INTO public.config_export_bq_to_gcs (
-                job_name, consommateur, export_type, expected_date_format, decimal_separator,
+                job_name, consommateur, action, export_type, expected_date_format, decimal_separator,
                 column_partition, last_value, last_value_reprise, dry_run,
                 delta_column, last_export_date, depth_days,
                 project_source, dataset_id, table_id, selected_columns, filtrage_autres,
                 project_destination, bucket_name, file_name_prefix, type_extraction, updated_at
             ) VALUES (
-                %(job_name)s, %(consommateur)s, %(export_type)s, %(expected_date_format)s, %(decimal_separator)s,
+                %(job_name)s, %(consommateur)s, %(action)s, %(export_type)s, %(expected_date_format)s, %(decimal_separator)s,
                 %(column_partition)s, %(last_value)s, %(last_value_reprise)s, %(dry_run)s,
                 %(delta_column)s, %(last_export_date)s, %(depth_days)s,
                 %(project_source)s, %(dataset_id)s, %(table_id)s, %(selected_columns)s, %(filtrage_autres)s,
@@ -158,6 +159,7 @@ class DBManager:
             )
             ON CONFLICT (job_name) DO UPDATE SET
                 consommateur = EXCLUDED.consommateur,
+                action = EXCLUDED.action,
                 export_type = EXCLUDED.export_type,
                 expected_date_format = EXCLUDED.expected_date_format,
                 decimal_separator = EXCLUDED.decimal_separator,
@@ -183,6 +185,7 @@ class DBManager:
         flat_params = {
             "job_name": params["job_name"],
             "consommateur": consommateur,
+            "action": action,
             "export_type": params["export_type"],
             "expected_date_format": params.get("expected_date_format"),
             "decimal_separator": params.get("decimal_separator"),
@@ -207,6 +210,28 @@ class DBManager:
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, flat_params)
+            conn.commit()
+
+    def update_config_action(self, job_name: str, action: str):
+        query = """
+            UPDATE public.config_export_bq_to_gcs
+            SET action = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE job_name = %s;
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (action, job_name))
+            conn.commit()
+
+    def update_last_export_date(self, job_name: str, last_export_date: str):
+        query = """
+            UPDATE public.config_export_bq_to_gcs
+            SET last_export_date = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE job_name = %s;
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (last_export_date, job_name))
             conn.commit()
 
     def get_config(self, job_name: str) -> dict:

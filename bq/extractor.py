@@ -10,55 +10,93 @@ class BQExtractor:
             self.client = bigquery.Client()
         return self.client
 
-    def build_query(self, config: dict) -> str:
-        """Assemble dynamiquement la requête SQL avec gestion du mode Delta (Incrémental)."""
+    def build_where_clauses(self, config: dict) -> list[str]:
         src = config["source"]
-        cols = ", ".join(src["selected_columns"])
-        
-        # CORRECTION BUG 1 : Accès correct à table_id via le dictionnaire src
-        query = f"SELECT {cols} FROM `{src['project_source']}.{src['dataset_id']}.{src['table_id']}`"
-        
-        # Conteneur pour nos clauses WHERE dynamiques
         where_clauses = []
-        
-        # 1. Gestion de la logique d'exportation Delta
-        if config.get("export_type") == "Delta" and config.get("parameters_Delta_Export"):
+        export_type = config.get("export_type")
+
+        if export_type == "Delta" and config.get("parameters_Delta_Export"):
             delta_cfg = config["parameters_Delta_Export"]
             delta_col = delta_cfg.get("Delta_column")
-            
             if delta_col:
-                # Récupération de la profondeur en jours (depth_days)
-                depth_days = delta_cfg.get("depth_days")
-                
-                # Si depth_days est fourni (différent de None), on calcule la date charnière
-                if depth_days is not None and str(depth_days).upper() != "NULL":
-                    # On calcule : Date du jour - X jours de profondeur
-                    charniere_date = (datetime.utcnow() - timedelta(days=int(depth_days))).strftime("%Y-%m-%dT%H:%M:%S")
-                    # Cast the column to TIMESTAMP to avoid DATE vs TIMESTAMP comparison errors
-                    where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) >= TIMESTAMP('{charniere_date}')")
-                
-                # Si depth_days n'est pas fourni, on se base sur la dernière date d'export (last_export_date)
-                elif delta_cfg.get("last_export_date"):
+                if delta_cfg.get("last_export_date"):
                     last_exp = delta_cfg.get("last_export_date")
-                    where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) >= TIMESTAMP('{last_exp}')")
+                    where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) > TIMESTAMP('{last_exp}')")
+                else:
+                    depth_days = delta_cfg.get("depth_days")
+                    if depth_days is not None and str(depth_days).upper() != "NULL":
+                        charniere_date = (datetime.utcnow() - timedelta(days=int(depth_days))).strftime("%Y-%m-%dT%H:%M:%S")
+                        where_clauses.append(f"CAST({delta_col} AS TIMESTAMP) >= TIMESTAMP('{charniere_date}')")
 
-        # 2. Ajout des filtres utilisateurs additionnels (ex: WHERE 1=1)
+        elif export_type == "Full_Referentiel":
+            column_partition = config.get("Column_partition")
+            last_value = config.get("last_Value")
+            last_value_reprise = config.get("last_Value_reprise")
+            if column_partition and last_value and last_value_reprise:
+                where_clauses.append(
+                    f"CAST({column_partition} AS TIMESTAMP) > TIMESTAMP('{last_value}')"
+                )
+                where_clauses.append(
+                    f"CAST({column_partition} AS TIMESTAMP) <= TIMESTAMP('{last_value_reprise}')"
+                )
+
         if src.get("Filtrage_autres"):
             clean_filter = src["Filtrage_autres"].strip()
-            # Si le filtre commence par WHERE, on extrait juste la condition
             if clean_filter.upper().startswith("WHERE"):
                 condition = clean_filter[5:].strip()
                 if condition:
                     where_clauses.append(condition)
 
-        # Assemblage final des clauses WHERE
+        return where_clauses
+
+    def build_max_delta_query(self, config: dict) -> str | None:
+        if config.get("export_type") != "Delta" or not config.get("parameters_Delta_Export"):
+            return None
+
+        delta_col = config["parameters_Delta_Export"].get("Delta_column")
+        if not delta_col:
+            return None
+
+        src = config["source"]
+        query = f"SELECT MAX(CAST({delta_col} AS TIMESTAMP)) AS max_delta FROM `{src['project_source']}.{src['dataset_id']}.{src['table_id']}`"
+        where_clauses = self.build_where_clauses(config)
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
-            
-        # 3. Sécurité d'échantillonnage pour le Dry Run
+        return query
+
+    def get_last_export_timestamp(self, config: dict):
+        query = self.build_max_delta_query(config)
+        if not query:
+            return None
+
+        client = self.get_client()
+        query_job = client.query(query)
+        result = query_job.result()
+        row = next(iter(result), None)
+        if not row:
+            return None
+
+        value = row[0]
+        if not value:
+            return None
+
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    def build_query(self, config: dict) -> str:
+        """Assemble dynamiquement la requête SQL avec gestion du mode Delta (Incrémental)."""
+        src = config["source"]
+        cols = ", ".join(src["selected_columns"])
+        query = f"SELECT {cols} FROM `{src['project_source']}.{src['dataset_id']}.{src['table_id']}`"
+        where_clauses = self.build_where_clauses(config)
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
         if config.get("dry_run"):
             query += " LIMIT 100"
-            
+
         print(f"[BQExtractor] Requête finale compilée : {query}")
         return query
 
