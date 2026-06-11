@@ -79,9 +79,15 @@ def get_dag_dir(config: dict | None = None) -> str:
     return os.path.join(os.path.dirname(__file__), "dag")
 
 
-# Si la configuration fournit un chemin de clef de service, l'exposer
-# vers l'API client Google via la variable d'environnement standard.
-app_credentials = set_google_application_credentials(app_config)
+# L'initialisation des credentials GCP est paresseuse pour permettre l'import
+# du module sans disposer d'une application default credentials pendant les tests.
+app_credentials = None
+
+def get_app_credentials():
+    global app_credentials
+    if app_credentials is None:
+        app_credentials = set_google_application_credentials(app_config)
+    return app_credentials
 
 app = FastAPI(title="BQ to GCS Data Export Engine", version="1.0")
 
@@ -93,14 +99,14 @@ gcs = None
 def get_bq_extractor():
     global bq
     if bq is None:
-        bq = BQExtractor(defaults=app_config, credentials=app_credentials)
+        bq = BQExtractor(defaults=app_config, credentials=get_app_credentials())
     return bq
 
 
 def get_gcs_consolidator():
     global gcs
     if gcs is None:
-        gcs = GCSConsolidator(defaults=app_config, credentials=app_credentials)
+        gcs = GCSConsolidator(defaults=app_config, credentials=get_app_credentials())
     return gcs
 
 
