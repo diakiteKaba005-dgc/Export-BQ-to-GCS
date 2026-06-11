@@ -1,0 +1,13 @@
+project_id: "my-project-rec"
+gcs_bucket: "my-project-rec-bucket"
+bigquery_dataset: "dataset_rec"
+dag_dir: "./dag"
+# En production, utilisez plutôt le nom du service account et non la clé JSON locale.
+service_account: "my-service-account@my-project-prd.iam.gserviceaccount.com"
+# credentials_path: "${SA_KEY_PATH}"
+postgres:
+  host: "localhost"
+  port: 5432
+  dbname: "my_project_rec"
+  user: "my_user"
+  password_secret: "${POSTGRES_PASSWORD_SECRET}"

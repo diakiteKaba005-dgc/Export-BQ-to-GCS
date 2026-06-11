@@ -23,6 +23,37 @@ def test_dbmanager_prefers_env_variables(monkeypatch):
     assert "password=env_secret" in manager.dsn
 
 
+def test_dbmanager_uses_postgres_app_password_alias(monkeypatch):
+    monkeypatch.setenv("DB_HOST", "db.host")
+    monkeypatch.setenv("DB_NAME", "env_db")
+    monkeypatch.setenv("DB_USER", "env_user")
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    monkeypatch.setenv("POSTGRES_APP_PASSWORD", "env_secret")
+    monkeypatch.setenv("DB_PORT", "5433")
+    monkeypatch.delenv("DB_HOST_LOCAL", raising=False)
+
+    manager = DBManager()
+
+    assert "password=env_secret" in manager.dsn
+
+
+def test_dbmanager_uses_secret_manager_password_when_password_missing(monkeypatch):
+    monkeypatch.setenv("DB_HOST", "db.host")
+    monkeypatch.setenv("DB_NAME", "env_db")
+    monkeypatch.setenv("DB_USER", "env_user")
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    monkeypatch.delenv("POSTGRES_APP_PASSWORD", raising=False)
+    monkeypatch.setenv("POSTGRES_PASSWORD_SECRET", "projects/test-project/secrets/db-password/versions/latest")
+    monkeypatch.setenv("DB_PORT", "5433")
+    monkeypatch.delenv("DB_HOST_LOCAL", raising=False)
+
+    monkeypatch.setattr(DBManager, "_fetch_secret_value", lambda self, secret_name: "secretpass")
+
+    manager = DBManager()
+
+    assert "password=secretpass" in manager.dsn
+
+
 def test_dbmanager_reads_local_socket_config_with_override(monkeypatch):
     monkeypatch.delenv("DB_HOST", raising=False)
     monkeypatch.delenv("DB_NAME", raising=False)

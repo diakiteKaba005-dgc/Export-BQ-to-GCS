@@ -1,0 +1,15 @@
+project_id: "sandbox-damadou"
+gcs_bucket: "sandbox-damadou-fd-export-finance-bi"
+bigquery_dataset: "SquadData"
+dag_dir: "./dag"
+# En production, utilisez plutôt le nom du service account et non la clé JSON locale.
+service_account: "my-service-account@my-project-prd.iam.gserviceaccount.com"
+#credentials_path: "${./../sa/sandbox-damadou-60b06ea6170b.json}"
+postgres:
+  host: "localhost"
+  port: 5432
+  dbname: "my_project_dev"
+  user: "my_user"
+  password_secret: "${POSTGRES_PASSWORD_SECRET}"
+# Exemple d'utilisation d'une variable d'environnement :
+# credentials_path: "${SA_KEY_PATH}"

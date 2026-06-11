@@ -1,25 +1,57 @@
 import os
+import re
 import json
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
+from config.loader import load_config
+
 class DBManager:
     def __init__(self):
         config_path = os.path.join(os.path.dirname(__file__), 'connexion.json')
 
-        env_db_host = os.getenv('DB_HOST')
-        env_db_name = os.getenv('DB_NAME')
-        env_db_user = os.getenv('DB_USER')
+        # Charger la configuration d'environnement (si présente)
+        config = {}
+        try:
+            config = load_config()
+        except FileNotFoundError:
+            config = {}
+
+        postgres_cfg = config.get("postgres", {})
+        env_db_host = os.getenv('DB_HOST') or postgres_cfg.get('host')
+        env_db_name = os.getenv('DB_NAME') or postgres_cfg.get('dbname') or postgres_cfg.get('database')
+        env_db_user = os.getenv('DB_USER') or postgres_cfg.get('user')
+
+        # Autoriser l'alias secret POSTGRES_APP_PASSWORD en plus de DB_PASSWORD
+        env_db_password = (
+            os.getenv('DB_PASSWORD')
+            or os.getenv('POSTGRES_APP_PASSWORD')
+            or postgres_cfg.get('password')
+        )
+
+        password_secret = (
+            os.getenv('POSTGRES_PASSWORD_SECRET')
+            or postgres_cfg.get('password_secret')
+        )
+
+        if env_db_password and re.search(r"\$\{[^}]+\}", env_db_password):
+            env_db_password = None
+        if password_secret and re.search(r"\$\{[^}]+\}", password_secret):
+            password_secret = None
+
+        env_db_port = os.getenv('DB_PORT') or postgres_cfg.get('port') or 5432
+
+        if not env_db_password and password_secret:
+            env_db_password = self._fetch_secret_value(password_secret)
 
         # 1. Priorité aux variables d'environnement si elles sont définies.
         #    Cela permet d'utiliser la même connexion PostgreSQL que sur Cloud Run
         #    même en local, sans se baser sur le socket Cloud SQL local.
         if env_db_host and env_db_name and env_db_user:
-            env_db_password = os.getenv('DB_PASSWORD')
             self.dsn = (
                 f"host={env_db_host} "
-                f"port={os.getenv('DB_PORT', 5432)} "
+                f"port={env_db_port} "
                 f"dbname={env_db_name} "
                 f"user={env_db_user}"
             )
@@ -60,6 +92,35 @@ class DBManager:
 
     def _get_connection(self):
         return psycopg2.connect(self.dsn)
+
+    def _get_secret_manager_client(self):
+        try:
+            from google.cloud import secretmanager
+        except ImportError as exc:
+            raise RuntimeError(
+                "google-cloud-secret-manager is required to fetch secrets from Secret Manager. "
+                "Install it with pip install google-cloud-secret-manager"
+            ) from exc
+
+        if not hasattr(self, "_secret_manager_client"):
+            self._secret_manager_client = secretmanager.SecretManagerServiceClient()
+        return self._secret_manager_client
+
+    def _fetch_secret_value(self, secret_name: str) -> str:
+        if not secret_name:
+            return None
+
+        if not secret_name.startswith("projects/"):
+            project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCLOUD_PROJECT")
+            if not project:
+                raise RuntimeError(
+                    "Secret Manager secret name must be fully qualified or GOOGLE_CLOUD_PROJECT/GCLOUD_PROJECT must be set."
+                )
+            secret_name = f"projects/{project}/secrets/{secret_name}/versions/latest"
+
+        client = self._get_secret_manager_client()
+        response = client.access_secret_version(name=secret_name)
+        return response.payload.data.decode("utf-8")
 
     def init_db_schema(self):
         """Vérifie la présence des tables et exécute les DDL si nécessaire."""

@@ -1,13 +1,23 @@
+import os
 from google.cloud import bigquery
 from datetime import datetime, timedelta
 
 class BQExtractor:
-    def __init__(self):
+    def __init__(self, defaults: dict | None = None, credentials=None):
         self.client = None
+        self.defaults = defaults or {}
+        self.credentials = credentials
+
+    def _resolve_project(self, src: dict) -> str:
+        # Priorité: source def dans la config -> defaults.project_id -> env GOOGLE_CLOUD_PROJECT
+        return src.get("project_source") or self.defaults.get("project_id") or os.environ.get("GOOGLE_CLOUD_PROJECT")
 
     def get_client(self):
         if self.client is None:
-            self.client = bigquery.Client()
+            if self.credentials is not None:
+                self.client = bigquery.Client(credentials=self.credentials)
+            else:
+                self.client = bigquery.Client()
         return self.client
 
     def build_where_clauses(self, config: dict) -> list[str]:
@@ -58,7 +68,8 @@ class BQExtractor:
             return None
 
         src = config["source"]
-        query = f"SELECT MAX(CAST({delta_col} AS TIMESTAMP)) AS max_delta FROM `{src['project_source']}.{src['dataset_id']}.{src['table_id']}`"
+        project = self._resolve_project(src)
+        query = f"SELECT MAX(CAST({delta_col} AS TIMESTAMP)) AS max_delta FROM `{project}.{src['dataset_id']}.{src['table_id']}`"
         where_clauses = self.build_where_clauses(config)
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
@@ -88,7 +99,8 @@ class BQExtractor:
         """Assemble dynamiquement la requête SQL avec gestion du mode Delta (Incrémental)."""
         src = config["source"]
         cols = ", ".join(src["selected_columns"])
-        query = f"SELECT {cols} FROM `{src['project_source']}.{src['dataset_id']}.{src['table_id']}`"
+        project = self._resolve_project(src)
+        query = f"SELECT {cols} FROM `{project}.{src['dataset_id']}.{src['table_id']}`"
         where_clauses = self.build_where_clauses(config)
 
         if where_clauses:

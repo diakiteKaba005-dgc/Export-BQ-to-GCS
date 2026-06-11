@@ -2,8 +2,14 @@ from google.cloud import storage
 import os
 
 class GCSConsolidator:
-    def __init__(self):
-        self.client = storage.Client()
+    def __init__(self, defaults: dict | None = None, credentials=None):
+        self.defaults = defaults or {}
+        self.credentials = credentials
+        project = self.defaults.get("project_id") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if project:
+            self.client = storage.Client(project=project, credentials=self.credentials)
+        else:
+            self.client = storage.Client(credentials=self.credentials)
 
     def consolidate_shards(self, bucket_name: str, file_prefix: str, table_id: str, end_time_str: str, format_type: str) -> str:
         """
